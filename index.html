@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Viewport optimized for mobile: prevent scaling, handle notches -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>言出法随-Raz aa-A</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap');
+        
+        body {
+            font-family: 'Fredoka', sans-serif;
+            overflow: hidden;
+            touch-action: none; /* Critical for dragging on mobile */
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F7FA 100%);
+            /* Dynamic Height for Mobile Browsers */
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        .game-ui {
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Microphone Animation States */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        
+        .mic-active {
+            animation: pulse-ring 1.5s infinite;
+            background-color: #ef4444 !important; /* Red-500 */
+            border-color: #fca5a5 !important;
+        }
+
+        /* Listening Wave Visualization */
+        .listening-wave {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 20px;
+            gap: 4px;
+        }
+        .bar {
+            width: 4px;
+            height: 10px;
+            background: white;
+            border-radius: 2px;
+            animation: wave 0.5s ease-in-out infinite;
+        }
+        .bar:nth-child(2) { animation-delay: 0.1s; }
+        .bar:nth-child(3) { animation-delay: 0.2s; }
+        .bar:nth-child(4) { animation-delay: 0.3s; }
+        .bar:nth-child(5) { animation-delay: 0.4s; }
+
+        @keyframes wave {
+            0%, 100% { height: 10px; opacity: 0.5; }
+            50% { height: 25px; opacity: 1; }
+        }
+
+        /* Success Animation */
+        .pop-text {
+            animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            color: #22c55e !important; /* Green-500 */
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .shake-card {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="h-full w-full relative select-none">
+
+    <!-- Canvas Layer -->
+    <canvas id="worldCanvas" class="absolute top-0 left-0 w-full h-full z-0"></canvas>
+
+    <!-- UI Layer -->
+    <div class="relative z-10 h-full flex flex-col justify-between p-4 pointer-events-none safe-area-inset-top safe-area-inset-bottom">
+        
+        <!-- Top Bar -->
+        <div class="flex flex-col w-full max-w-2xl mx-auto gap-3 pointer-events-auto mt-2">
+            <div class="flex justify-between items-center game-ui">
+                <div class="bg-white/90 backdrop-blur-md rounded-2xl p-2 px-3 md:px-4 shadow-xl flex items-center gap-2 md:gap-3 border-b-4 border-slate-200">
+                    <span class="text-2xl md:text-3xl">🌟</span>
+                    <span id="scoreDisplay" class="text-2xl md:text-3xl font-black text-indigo-600">0</span>
+                </div>
+                
+                <div class="bg-white/90 backdrop-blur-md rounded-2xl p-2 shadow-xl border-b-4 border-slate-200">
+                     <select id="levelSelect" class="bg-transparent text-slate-700 font-bold outline-none cursor-pointer text-sm md:text-base px-1 md:px-2 py-1 max-w-[150px] md:max-w-none">
+                        <option value="AA">Raz AA (基础)</option>
+                        <option value="A">Raz A (进阶)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-container bg-black/10 rounded-full h-3 md:h-4 w-full overflow-hidden relative">
+                <div id="progressBar" class="h-full bg-yellow-400 transition-all duration-500 ease-out rounded-full" style="width: 0%"></div>
+            </div>
+            <div class="text-center text-white font-bold text-shadow text-xs md:text-sm" id="progressText">Level Progress: 0/10</div>
+        </div>
+
+        <!-- Center Card -->
+        <!-- Adjusted positioning for mobile keyboards and visibility -->
+        <div class="absolute top-[40%] md:top-[45%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm text-center pointer-events-auto">
+            <div id="cardContainer" class="bg-white rounded-[2rem] shadow-2xl p-6 md:p-8 transition-all duration-300 border-b-8 border-slate-100 relative overflow-hidden">
+                
+                <!-- Hint Overlay (Visual Cue) -->
+                <div id="hintBadge" class="absolute top-4 right-4 text-[10px] md:text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-bold hidden">Hint Mode</div>
+
+                <p class="text-slate-400 text-xs md:text-sm mb-1 font-bold tracking-widest uppercase">Say Magic Word</p>
+                <h1 id="targetWord" class="text-4xl md:text-6xl font-black text-slate-800 mb-4 md:mb-6 tracking-tight leading-tight select-all transition-colors duration-300">...</h1>
+                
+                <div class="flex justify-center gap-4 md:gap-6 items-center">
+                    <!-- Audio Button -->
+                    <button id="speakBtn" class="bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-full p-3 md:p-4 transition-colors shadow-sm active:scale-95 touch-manipulation">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 md:w-7 md:h-7"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                    </button>
+
+                    <!-- Mic Button (Main Interaction) -->
+                    <!-- Sized larger for touch targets -->
+                    <button id="micBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white rounded-full w-20 h-20 md:w-24 md:h-24 flex items-center justify-center border-8 border-indigo-100 shadow-xl transition-all active:scale-95 touch-manipulation">
+                        <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8 md:w-10 md:h-10"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                        
+                        <!-- Listening Wave (Hidden by default) -->
+                        <div id="listeningWave" class="listening-wave hidden absolute">
+                            <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Feedback Message (Simplified) -->
+            <div id="feedbackMsg" class="mt-4 h-8 text-white font-bold text-base md:text-lg opacity-0 transition-opacity drop-shadow-md">
+                Try again...
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex justify-center pb-8 md:pb-12 pointer-events-auto">
+             <button id="skipBtn" class="bg-white/20 hover:bg-white/40 text-white font-bold py-3 px-8 rounded-full text-sm md:text-base backdrop-blur transition-all border border-white/30 touch-manipulation">Skip / Next</button>
+        </div>
+    </div>
+
+    <!-- iOS Browser Warning Overlay -->
+    <div id="iosWarning" class="fixed inset-0 bg-black/90 z-[100] hidden flex flex-col items-center justify-center text-white p-8 text-center">
+        <div class="text-6xl mb-6">🧭</div>
+        <h2 class="text-2xl font-bold mb-4">请使用 Safari 打开</h2>
+        <p class="text-slate-300 mb-8 leading-relaxed">
+            检测到您正在使用 iOS 设备。<br>
+            为了正常使用麦克风功能，<br>
+            请点击右下角浏览器图标，<br>
+            选择 <span class="text-yellow-400 font-bold">"在 Safari 中打开"</span>。
+        </p>
+        <button onclick="document.getElementById('iosWarning').style.display='none'" class="text-sm text-slate-500 underline">
+            我已知晓，坚持尝试
+        </button>
+    </div>
+
+    <!-- Start Overlay -->
+    <div id="startOverlay" class="fixed inset-0 bg-gradient-to-br from-indigo-600 to-purple-700 z-50 flex items-center justify-center flex-col text-white p-6 text-center">
+        <div class="bg-white/10 p-6 md:p-8 rounded-[3rem] backdrop-blur-lg border border-white/20 shadow-2xl max-w-md w-full">
+            <div class="text-5xl md:text-6xl mb-4">🧙‍♂️</div>
+            <h1 class="text-3xl md:text-4xl font-black mb-2 text-yellow-300 tracking-tight">言出法随</h1>
+            <h2 class="text-lg md:text-xl text-indigo-100 mb-6 md:mb-8 font-medium">Raz AA-A World Builder</h2>
+            
+            <div class="space-y-4 md:space-y-6">
+                <div class="flex items-center gap-4 bg-black/20 p-4 rounded-2xl text-left">
+                    <span class="text-3xl">🗣️</span>
+                    <div>
+                        <p class="font-bold text-yellow-200">Read the Word</p>
+                        <p class="text-xs text-indigo-200">大声读出单词</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4 bg-black/20 p-4 rounded-2xl text-left">
+                    <span class="text-3xl">✨</span>
+                    <div>
+                        <p class="font-bold text-green-300">Create the World</p>
+                        <p class="text-xs text-indigo-200">召唤对应的魔法物品</p>
+                    </div>
+                </div>
+
+                <button id="startGameBtn" class="w-full bg-yellow-400 text-indigo-900 text-lg md:text-xl font-black py-4 rounded-xl hover:bg-yellow-300 transform hover:scale-[1.02] transition-all shadow-xl mt-4 touch-manipulation">
+                    START GAME
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. DEVICE & BROWSER DETECTION UTILS ---
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        
+        function checkMobileEnvironment() {
+            // Logic: If it is iOS but NOT Safari (likely Chrome on iOS or In-App Browser), Speech API usually fails or has no permissions.
+            if (isIOS && !isSafari) {
+                document.getElementById('iosWarning').classList.remove('hidden');
+                document.getElementById('iosWarning').style.display = 'flex';
+            }
+        }
+
+        // Run detection on load
+        window.addEventListener('load', checkMobileEnvironment);
+
+
+        // --- 2. EXPANDED RAZ AA & A VOCABULARY ---
+        const vocabulary = {
+            AA: [
+                { word: "ant", emoji: "🐜", size: 30, type: "animal" },
+                { word: "bear", emoji: "🐻", size: 90, type: "animal" },
+                { word: "bird", emoji: "🐦", size: 40, type: "animal" },
+                { word: "cat", emoji: "🐱", size: 50, type: "animal" },
+                { word: "cow", emoji: "🐮", size: 100, type: "animal" },
+                { word: "dog", emoji: "🐶", size: 60, type: "animal" },
+                { word: "duck", emoji: "🦆", size: 45, type: "animal" },
+                { word: "elephant", emoji: "🐘", size: 120, type: "animal" },
+                { word: "fish", emoji: "🐠", size: 35, type: "animal" },
+                { word: "frog", emoji: "🐸", size: 35, type: "animal" },
+                { word: "goat", emoji: "🐐", size: 60, type: "animal" },
+                { word: "hen", emoji: "🐔", size: 40, type: "animal" },
+                { word: "horse", emoji: "🐴", size: 100, type: "animal" },
+                { word: "lion", emoji: "🦁", size: 90, type: "animal" },
+                { word: "monkey", emoji: "🐵", size: 65, type: "animal" },
+                { word: "mouse", emoji: "🐭", size: 25, type: "animal" },
+                { word: "pig", emoji: "🐷", size: 70, type: "animal" },
+                { word: "rabbit", emoji: "🐰", size: 40, type: "animal" },
+                { word: "sheep", emoji: "🐑", size: 70, type: "animal" },
+                { word: "snake", emoji: "🐍", size: 50, type: "animal" },
+                { word: "tiger", emoji: "🐯", size: 90, type: "animal" },
+                { word: "turtle", emoji: "🐢", size: 50, type: "animal" },
+                { word: "apple", emoji: "🍎", size: 40, type: "food" },
+                { word: "banana", emoji: "🍌", size: 40, type: "food" },
+                { word: "carrot", emoji: "🥕", size: 35, type: "food" },
+                { word: "egg", emoji: "🥚", size: 30, type: "food" },
+                { word: "flower", emoji: "🌸", size: 40, type: "nature" },
+                { word: "moon", emoji: "🌙", size: 80, type: "nature" },
+                { word: "rain", emoji: "🌧️", size: 60, type: "nature" },
+                { word: "star", emoji: "⭐", size: 50, type: "nature" },
+                { word: "sun", emoji: "☀️", size: 100, type: "nature" },
+                { word: "tree", emoji: "🌳", size: 110, type: "nature" },
+                { word: "water", emoji: "💧", size: 30, type: "nature" },
+                { word: "ball", emoji: "⚽", size: 45, type: "toy" },
+                { word: "bed", emoji: "🛏️", size: 80, type: "furniture" },
+                { word: "book", emoji: "📘", size: 45, type: "object" },
+                { word: "box", emoji: "📦", size: 50, type: "object" },
+                { word: "bus", emoji: "🚌", size: 100, type: "transport" },
+                { word: "car", emoji: "🚗", size: 80, type: "transport" },
+                { word: "chair", emoji: "🪑", size: 60, type: "furniture" },
+                { word: "door", emoji: "🚪", size: 70, type: "furniture" },
+                { word: "hat", emoji: "🎩", size: 40, type: "clothing" },
+                { word: "house", emoji: "🏠", size: 150, type: "building" },
+                { word: "kite", emoji: "🪁", size: 60, type: "toy" },
+                { word: "shoe", emoji: "👟", size: 40, type: "clothing" },
+                { word: "table", emoji: "🪵", size: 80, type: "furniture" },
+                { word: "blue", emoji: "🔵", size: 40, type: "color" },
+                { word: "green", emoji: "🟢", size: 40, type: "color" },
+                { word: "red", emoji: "🔴", size: 40, type: "color", aliases: ["rad", "read"] },
+                { word: "yellow", emoji: "🟡", size: 40, type: "color" }
+            ],
+            A: [
+                { word: "airplane", emoji: "✈️", size: 110, type: "transport" },
+                { word: "baby", emoji: "👶", size: 50, type: "person" },
+                { word: "balloon", emoji: "🎈", size: 45, type: "object" },
+                { word: "bat", emoji: "🦇", size: 40, type: "animal" },
+                { word: "beach", emoji: "🏖️", size: 120, type: "place" },
+                { word: "bee", emoji: "🐝", size: 25, type: "animal" },
+                { word: "bike", emoji: "🚲", size: 70, type: "transport" },
+                { word: "boat", emoji: "⛵", size: 90, type: "transport" },
+                { word: "boy", emoji: "👦", size: 60, type: "person" },
+                { word: "bread", emoji: "🍞", size: 45, type: "food" },
+                { word: "cake", emoji: "🎂", size: 50, type: "food" },
+                { word: "city", emoji: "🏙️", size: 150, type: "place" },
+                { word: "coat", emoji: "🧥", size: 55, type: "clothing" },
+                { word: "corn", emoji: "🌽", size: 40, type: "food" },
+                { word: "desk", emoji: "🖥️", size: 70, type: "furniture" },
+                { word: "doll", emoji: "🎎", size: 45, type: "toy" },
+                { word: "farm", emoji: "🚜", size: 120, type: "place" },
+                { word: "fire", emoji: "🔥", size: 60, type: "nature" },
+                { word: "fish", emoji: "🐟", size: 40, type: "animal" },
+                { word: "flag", emoji: "🚩", size: 50, type: "object" },
+                { word: "fly", emoji: "🪰", size: 20, type: "animal" },
+                { word: "food", emoji: "🍔", size: 50, type: "food" },
+                { word: "fox", emoji: "🦊", size: 60, type: "animal" },
+                { word: "garden", emoji: "🌻", size: 100, type: "place" },
+                { word: "girl", emoji: "👧", size: 60, type: "person" },
+                { word: "grass", emoji: "🌱", size: 30, type: "nature" },
+                { word: "home", emoji: "🏡", size: 140, type: "place" },
+                { word: "king", emoji: "👑", size: 50, type: "person" },
+                { word: "lamp", emoji: "💡", size: 40, type: "object" },
+                { word: "leaf", emoji: "🍂", size: 30, type: "nature" },
+                { word: "leg", emoji: "🦵", size: 50, type: "body" },
+                { word: "man", emoji: "👨", size: 70, type: "person" },
+                { word: "map", emoji: "🗺️", size: 60, type: "object" },
+                { word: "milk", emoji: "🥛", size: 40, type: "food" },
+                { word: "nest", emoji: "🪹", size: 50, type: "nature" },
+                { word: "night", emoji: "🌃", size: 100, type: "nature" },
+                { word: "nose", emoji: "👃", size: 30, type: "body" },
+                { word: "ocean", emoji: "🌊", size: 120, type: "nature" },
+                { word: "owl", emoji: "🦉", size: 55, type: "animal" },
+                { word: "park", emoji: "🏞️", size: 130, type: "place" },
+                { word: "party", emoji: "🎉", size: 60, type: "event" },
+                { word: "pen", emoji: "🖊️", size: 25, type: "object", aliases: ["pan", "pin"] },
+                { word: "pet", emoji: "🐹", size: 40, type: "animal" },
+                { word: "pizza", emoji: "🍕", size: 50, type: "food" },
+                { word: "plane", emoji: "✈️", size: 110, type: "transport" },
+                { word: "plant", emoji: "🪴", size: 50, type: "nature" },
+                { word: "pool", emoji: "🏊", size: 100, type: "place" },
+                { word: "school", emoji: "🏫", size: 150, type: "place" },
+                { word: "seed", emoji: "🌰", size: 20, type: "nature" },
+                { word: "ship", emoji: "🚢", size: 120, type: "transport" },
+                { word: "shop", emoji: "🏪", size: 120, type: "place" },
+                { word: "sick", emoji: "🤒", size: 50, type: "adj" },
+                { word: "sky", emoji: "☁️", size: 100, type: "nature" },
+                { word: "snow", emoji: "❄️", size: 40, type: "nature" },
+                { word: "sock", emoji: "🧦", size: 35, type: "clothing" },
+                { word: "stop", emoji: "🛑", size: 60, type: "sign" },
+                { word: "store", emoji: "🏪", size: 120, type: "place" },
+                { word: "street", emoji: "🛣️", size: 120, type: "place" },
+                { word: "toy", emoji: "🧸", size: 50, type: "object" },
+                { word: "train", emoji: "🚂", size: 110, type: "transport" },
+                { word: "truck", emoji: "🚚", size: 100, type: "transport" },
+                { word: "watch", emoji: "⌚", size: 35, type: "object" },
+                { word: "wind", emoji: "💨", size: 60, type: "nature" },
+                { word: "zoo", emoji: "🦓", size: 140, type: "place" },
+                { word: "run", emoji: "🏃", size: 60, type: "action" },
+                { word: "jump", emoji: "⏫", size: 60, type: "action" },
+                { word: "sleep", emoji: "💤", size: 50, type: "action" },
+                { word: "swim", emoji: "🏊", size: 60, type: "action" },
+                { word: "play", emoji: "🎮", size: 50, type: "action" },
+                { word: "eat", emoji: "🍽️", size: 50, type: "action" }
+            ]
+        };
+
+        // --- 3. GAME STATE ---
+        let currentLevel = 'AA';
+        let currentWordObj = null;
+        let remainingWords = [];
+        let score = 0;
+        let roundProgress = 0;
+        const ROUND_GOAL = 10;
+        let isListening = false;
+        let isProcessing = false;
+        let recognition = null;
+        let synth = window.speechSynthesis;
+        let physicsObjects = []; 
+        let errorCount = 0;
+        
+        // --- 4. PHYSICS ENGINE ---
+        const canvas = document.getElementById('worldCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        const GRAVITY = 0.5;
+        const BOUNCE = 0.4;
+        const FRICTION = 0.95;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            // Ensure physics objects stay in bounds on resize
+            physicsObjects.forEach(obj => {
+                if(obj.x > width) obj.x = width - 20;
+                if(obj.y > height) obj.y = height - 20;
+            });
+        }
+        window.addEventListener('resize', resize);
+        // Also listen for orientation changes explicitly
+        window.addEventListener('orientationchange', () => setTimeout(resize, 100));
+        resize();
+
+        class PhysicsEmoji {
+            constructor(wordObj, x, y) {
+                this.emoji = wordObj.emoji;
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8 - 2;
+                // Scale size slightly down on mobile
+                const scale = width < 600 ? 0.8 : 1.0;
+                const baseSize = (wordObj.size || 50) * scale; 
+                this.size = baseSize; 
+                this.radius = this.size / 2;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 0.1;
+                this.isDragging = false;
+                this.mass = this.size * 1.5;
+            }
+
+            update() {
+                if (this.isDragging) return;
+
+                this.vy += GRAVITY;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.rotation += this.rotSpeed;
+
+                if (this.y + this.radius > height) {
+                    this.y = height - this.radius;
+                    this.vy *= -BOUNCE;
+                    this.vx *= FRICTION;
+                    this.rotSpeed *= FRICTION;
+                    if (Math.abs(this.vy) < 1) this.vy = 0;
+                    if (Math.abs(this.vx) < 0.1) this.vx = 0;
+                }
+
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx *= -BOUNCE;
+                }
+                if (this.x + this.radius > width) {
+                    this.x = width - this.radius;
+                    this.vx *= -BOUNCE;
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.font = `${this.size}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, 0, 5); 
+                ctx.restore();
+            }
+        }
+
+        function checkCollisions() {
+            for (let i = 0; i < physicsObjects.length; i++) {
+                for (let j = i + 1; j < physicsObjects.length; j++) {
+                    const obj1 = physicsObjects[i];
+                    const obj2 = physicsObjects[j];
+                    if (obj1.isDragging || obj2.isDragging) continue;
+
+                    const dx = obj2.x - obj1.x;
+                    const dy = obj2.y - obj1.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const minDist = obj1.radius + obj2.radius;
+
+                    if (distance < minDist) {
+                        const angle = Math.atan2(dy, dx);
+                        const overlap = minDist - distance;
+                        
+                        const moveX = overlap * Math.cos(angle) * 0.5;
+                        const moveY = overlap * Math.sin(angle) * 0.5;
+                        obj1.x -= moveX; obj1.y -= moveY;
+                        obj2.x += moveX; obj2.y += moveY;
+
+                        const nx = dx / distance;
+                        const ny = dy / distance;
+                        const tx = -ny;
+                        const ty = nx;
+
+                        const dpTan1 = obj1.vx * tx + obj1.vy * ty;
+                        const dpTan2 = obj2.vx * tx + obj2.vy * ty;
+                        const dpNorm1 = obj1.vx * nx + obj1.vy * ny;
+                        const dpNorm2 = obj2.vx * nx + obj2.vy * ny;
+
+                        const m1 = (dpNorm1 * (obj1.mass - obj2.mass) + 2 * obj2.mass * dpNorm2) / (obj1.mass + obj2.mass);
+                        const m2 = (dpNorm2 * (obj2.mass - obj1.mass) + 2 * obj1.mass * dpNorm1) / (obj1.mass + obj2.mass);
+
+                        obj1.vx = tx * dpTan1 + nx * m1;
+                        obj1.vy = ty * dpTan1 + ny * m1;
+                        obj2.vx = tx * dpTan2 + nx * m2;
+                        obj2.vy = ty * dpTan2 + ny * m2;
+                        
+                        obj1.vx *= 0.9; obj1.vy *= 0.9;
+                        obj2.vx *= 0.9; obj2.vy *= 0.9;
+                    }
+                }
+            }
+        }
+
+        // Particle System
+        let particles = [];
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 15;
+                this.vy = (Math.random() - 0.5) * 15;
+                this.life = 1.0;
+                this.color = color;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 0.03;
+            }
+            draw() {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        function createExplosion(x, y) {
+            const colors = ['#FCD34D', '#34D399', '#60A5FA', '#F87171'];
+            for(let i=0; i<25; i++) {
+                particles.push(new Particle(x, y, colors[Math.floor(Math.random()*colors.length)]));
+            }
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, width, height);
+            checkCollisions();
+            physicsObjects.forEach(obj => { obj.update(); obj.draw(); });
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                if (particles[i].life <= 0) particles.splice(i, 1);
+            }
+            requestAnimationFrame(gameLoop);
+        }
+        gameLoop();
+
+        // Drag Interaction - Unified logic for Mouse & Touch
+        let dragObj = null;
+        function getEventPos(e) {
+            if(e.touches && e.touches.length > 0) return {x: e.touches[0].clientX, y: e.touches[0].clientY};
+            return {x: e.clientX, y: e.clientY};
+        }
+        function handleStart(e) {
+            // e.preventDefault(); // Don't prevent default on start to allow click events to pass through, but helpful for canvas only
+            // Check target. If it's UI, don't drag physics
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT') return;
+
+            // Unlock audio context on first user interaction
+            if (window.AudioContext && (!window.audioCtx || window.audioCtx.state === 'suspended')) {
+                playSound('pop'); 
+            }
+
+            const pos = getEventPos(e);
+            for (let i = physicsObjects.length - 1; i >= 0; i--) {
+                const obj = physicsObjects[i];
+                const dx = pos.x - obj.x;
+                const dy = pos.y - obj.y;
+                if (Math.sqrt(dx*dx + dy*dy) < obj.radius * 1.5) { // Increase hit area slightly for touch
+                    dragObj = obj;
+                    obj.isDragging = true;
+                    // Move to front
+                    physicsObjects.splice(i, 1);
+                    physicsObjects.push(obj);
+                    obj.vx = 0; obj.vy = 0;
+                    playSound('pop');
+                    break;
+                }
+            }
+        }
+        function handleMove(e) {
+            if (dragObj) {
+                // e.preventDefault(); // Prevent scrolling while dragging
+                const pos = getEventPos(e);
+                dragObj.x = pos.x;
+                dragObj.y = pos.y;
+            }
+        }
+        function handleEnd() {
+            if (dragObj) {
+                dragObj.isDragging = false;
+                dragObj.vy = Math.random() * -2; 
+                dragObj = null;
+            }
+        }
+
+        // Attach listeners to window/body to catch drags anywhere
+        window.addEventListener('mousedown', handleStart);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+        
+        // Passive: false is crucial for touchmove to prevent scrolling
+        window.addEventListener('touchstart', handleStart, {passive: false});
+        window.addEventListener('touchmove', handleMove, {passive: false});
+        window.addEventListener('touchend', handleEnd);
+
+
+        // --- 5. SPEECH LOGIC (Optimized for iOS/Safari) ---
+        function initSpeech() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                // If checking fails but we are on iOS, warning is already shown.
+                // For PC non-Chrome browsers:
+                if (!isIOS) alert("Please use Chrome or Safari for voice features.");
+                return;
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 3;
+            recognition.continuous = true;
+
+            recognition.onstart = () => {
+                isListening = true;
+                document.getElementById('micBtn').classList.add('mic-active');
+                document.getElementById('listeningWave').classList.remove('hidden');
+                document.getElementById('micIcon').classList.add('hidden');
+                document.getElementById('feedbackMsg').style.opacity = '0';
+            };
+
+            recognition.onend = () => {
+                // iOS Safari Logic: It stops automatically after silence.
+                // If user intended to listen, we might want to restart or just show UI state update.
+                // Auto-restart often fails on iOS without click. 
+                // Better UX: Show "Mic off" state and let user click again if needed.
+                isListening = false;
+                document.getElementById('micBtn').classList.remove('mic-active');
+                document.getElementById('listeningWave').classList.add('hidden');
+                document.getElementById('micIcon').classList.remove('hidden');
+                
+                // Optional: If we were really expecting continuous input, we could try to restart once.
+                // But generally infinite loops cause errors in Safari. 
+            };
+
+            recognition.onerror = (event) => {
+                console.log("Speech Error", event.error);
+                if (event.error === 'not-allowed') {
+                    // This happens if user denies permission
+                    alert("Please allow microphone access to play.");
+                }
+                // On iOS, 'no-speech' or 'network' errors are common. 
+                // We handle them by stopping quietly.
+            };
+
+            recognition.onresult = (event) => {
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const result = event.results[i];
+                    if (result.isFinal) {
+                         const transcript = result[0].transcript.trim().toLowerCase();
+                         checkAnswer(transcript); 
+                    }
+                }
+            };
+        }
+
+        function levenshtein(a, b) {
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const matrix = [];
+            for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }
+            for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    if (b.charAt(i - 1) == a.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        function checkAnswer(spoken) {
+            if (!currentWordObj || isProcessing) return false;
+
+            const target = currentWordObj.word.toLowerCase();
+            const cleanSpoken = spoken.replace(/^(a|an|the)\s+/, '').replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,""); 
+            
+            const dist = levenshtein(cleanSpoken, target);
+            const tolerance = target.length > 5 ? 2 : 1; 
+
+            let isCorrect = (cleanSpoken === target || dist <= tolerance);
+
+            if (!isCorrect && currentWordObj.aliases) {
+                if (currentWordObj.aliases.includes(cleanSpoken)) {
+                    isCorrect = true;
+                }
+            }
+
+            if (isCorrect) {
+                handleSuccess();
+                return true;
+            } else {
+                handleFailure();
+                return false;
+            }
+        }
+
+        function handleFailure() {
+            if (isProcessing) return;
+            errorCount++;
+            
+            const card = document.getElementById('cardContainer');
+            card.classList.remove('shake-card');
+            void card.offsetWidth; 
+            card.classList.add('shake-card');
+
+            document.getElementById('feedbackMsg').textContent = "Listen & Try Again!";
+            document.getElementById('feedbackMsg').style.opacity = '1';
+
+            if (errorCount >= 3) {
+                document.getElementById('hintBadge').classList.remove('hidden');
+                speakWord();
+            }
+        }
+
+        function handleSuccess() {
+            if (isProcessing) return;
+            isProcessing = true; 
+
+            errorCount = 0;
+            document.getElementById('hintBadge').classList.add('hidden');
+            document.getElementById('feedbackMsg').style.opacity = '0';
+            playSound('success');
+            
+            // Spawn Object - Centered spawn for better visibility on mobile
+            const startX = width / 2 + (Math.random() * 100 - 50);
+            physicsObjects.push(new PhysicsEmoji(currentWordObj, startX, -50));
+            createExplosion(width/2, height/2);
+
+            score++;
+            document.getElementById('scoreDisplay').textContent = score;
+            roundProgress++;
+            updateProgressBar();
+
+            if (remainingWords.length > 0) {
+                 remainingWords = remainingWords.filter(w => w.word !== currentWordObj.word);
+            }
+
+            const h1 = document.getElementById('targetWord');
+            h1.classList.add('text-green-500', 'scale-110'); // Simple CSS transition class can be added
+            
+            // Wait slightly longer on mobile to read feedback? No, keep snappy.
+            if (roundProgress >= ROUND_GOAL) {
+                celebrateLevelComplete();
+            } else {
+                setTimeout(() => {
+                    h1.classList.remove('text-green-500', 'scale-110');
+                    loadNextWord();
+                }, 1200);
+            }
+        }
+
+        function updateProgressBar() {
+            const percentage = (roundProgress / ROUND_GOAL) * 100;
+            const bar = document.getElementById('progressBar');
+            const text = document.getElementById('progressText');
+            bar.style.width = `${percentage}%`;
+            text.textContent = `Level Progress: ${roundProgress}/${ROUND_GOAL}`;
+        }
+
+        function celebrateLevelComplete() {
+            document.getElementById('targetWord').textContent = "AWESOME!";
+            let count = 0;
+            const interval = setInterval(() => {
+                createExplosion(Math.random()*width, Math.random()*height);
+                playSound('success');
+                count++;
+                if (count > 5) clearInterval(interval);
+            }, 300);
+
+            setTimeout(() => {
+                roundProgress = 0;
+                updateProgressBar();
+                // Reset styling
+                const h1 = document.getElementById('targetWord');
+                h1.classList.remove('text-green-500', 'scale-110');
+                loadNextWord();
+            }, 3000);
+        }
+
+        // --- 6. AUDIO ---
+        function speakWord() {
+            if (!currentWordObj) return;
+            const utterance = new SpeechSynthesisUtterance(currentWordObj.word);
+            utterance.rate = 0.75; 
+            utterance.lang = 'en-US';
+            utterance.pitch = 1.1; 
+            synth.speak(utterance);
+        }
+
+        // Web Audio API wrapper
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            
+            if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now); 
+                osc.frequency.exponentialRampToValueAtTime(1046.5, now + 0.1); 
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+                
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.type = 'triangle';
+                osc2.frequency.setValueAtTime(659.25, now); 
+                gain2.gain.setValueAtTime(0.1, now);
+                gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc2.start(now);
+                osc2.stop(now + 0.5);
+
+            } else if (type === 'pop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+        }
+
+        // --- 7. INIT ---
+        function initLevelData() {
+            remainingWords = [...vocabulary[currentLevel]];
+        }
+
+        function loadNextWord() {
+            isProcessing = false; 
+            if (remainingWords.length === 0) initLevelData();
+            
+            let idx = Math.floor(Math.random() * remainingWords.length);
+            if (remainingWords.length > 1 && currentWordObj && remainingWords[idx].word === currentWordObj.word) {
+                idx = (idx + 1) % remainingWords.length;
+            }
+
+            currentWordObj = remainingWords[idx];
+            errorCount = 0;
+            document.getElementById('hintBadge').classList.add('hidden');
+            
+            const wordEl = document.getElementById('targetWord');
+            wordEl.style.opacity = 0;
+            setTimeout(() => {
+                wordEl.textContent = currentWordObj.word;
+                wordEl.style.opacity = 1;
+            }, 200);
+        }
+
+        function startGame() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            document.getElementById('startOverlay').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('startOverlay').style.display = 'none';
+            }, 500);
+            
+            initSpeech();
+            initLevelData();
+            loadNextWord();
+        }
+
+        document.getElementById('startGameBtn').addEventListener('click', startGame);
+        document.getElementById('speakBtn').addEventListener('click', speakWord);
+        document.getElementById('micBtn').addEventListener('click', () => {
+            if (!recognition) initSpeech();
+            if (isListening) recognition.stop();
+            else recognition.start();
+        });
+        document.getElementById('skipBtn').addEventListener('click', loadNextWord);
+        
+        document.getElementById('levelSelect').addEventListener('change', (e) => {
+            currentLevel = e.target.value;
+            roundProgress = 0;
+            score = 0;
+            physicsObjects = []; 
+            document.getElementById('scoreDisplay').textContent = 0;
+            updateProgressBar();
+            initLevelData();
+            loadNextWord();
+        });
+
+        // Keyboard support
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                 if (isListening) recognition.stop();
+                 else recognition.start();
+            }
+        });
+    </script>
+</body>
+</html>
